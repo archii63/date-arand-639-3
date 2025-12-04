@@ -1,0 +1,135 @@
+# QuickNotes-CLI
+
+A tiny, dependency-free command-line note manager.  
+Store short notes locally in a JSON file, add/list/remove notes quickly.
+
+## Features
+- Add a note
+- List all notes
+- Remove a note by ID
+- Simple JSON-based storage (`~/.quicknotes/notes.json`)
+
+## Requirements
+- Python 3.8+
+
+## Installation
+```bash
+# clone the repo
+git clone https://github.com/your-username/QuickNotes-CLI.git
+cd QuickNotes-CLI
+
+# (optional) create a virtualenv
+python -m venv .venv
+source .venv/bin/activate  # macOS / Linux
+.venv\Scripts\activate      # Windows
+
+# run directly
+python app.py --help
+# add a note
+python app.py add "Buy milk"
+
+# list notes
+python app.py list
+
+# remove a note by id
+python app.py remove 2
+
+## app.py
+```python
+#!/usr/bin/env python3
+"""
+QuickNotes-CLI
+A tiny command-line note manager with JSON storage.
+"""
+from __future__ import annotations
+import argparse
+import json
+from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
+
+APP_DIR = Path.home() / ".quicknotes"
+DATA_FILE = APP_DIR / "notes.json"
+
+@dataclass
+class Note:
+    id: int
+    text: str
+    created_at: str
+
+def ensure_storage():
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    if not DATA_FILE.exists():
+        DATA_FILE.write_text("[]", encoding="utf-8")
+
+def load_notes() -> List[Note]:
+    ensure_storage()
+    try:
+        raw = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        return [Note(**r) for r in raw]
+    except Exception:
+        return []
+
+def save_notes(notes: List[Note]):
+    DATA_FILE.write_text(json.dumps([asdict(n) for n in notes], ensure_ascii=False, indent=2), encoding="utf-8")
+
+def next_id(notes: List[Note]) -> int:
+    if not notes:
+        return 1
+    return max(n.id for n in notes) + 1
+
+def cmd_add(args):
+    notes = load_notes()
+    nid = next_id(notes)
+    note = Note(id=nid, text=args.text.strip(), created_at=datetime.now(timezone.utc).isoformat())
+    notes.append(note)
+    save_notes(notes)
+    print(f"Added note #{note.id}")
+
+def cmd_list(_: argparse.Namespace):
+    notes = load_notes()
+    if not notes:
+        print("No notes yet. Add one with `add`.")
+        return
+    for n in notes:
+        created = n.created_at
+        print(f"[{n.id}] {n.text} (created: {created})")
+
+def cmd_remove(args):
+    notes = load_notes()
+    new = [n for n in notes if n.id != args.id]
+    if len(new) == len(notes):
+        print(f"No note found with id {args.id}")
+    else:
+        save_notes(new)
+        print(f"Removed note #{args.id}")
+
+def main():
+    parser = argparse.ArgumentParser(prog="quicknotes", description="QuickNotes-CLI — tiny note manager")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_add = sub.add_parser("add", help="Add a new note")
+    p_add.add_argument("text", type=str, help="Text of the note")
+    p_add.set_defaults(func=cmd_add)
+
+    p_list = sub.add_parser("list", help="List all notes")
+    p_list.set_defaults(func=cmd_list)
+
+    p_remove = sub.add_parser("remove", help="Remove a note by id")
+    p_remove.add_argument("id", type=int, help="ID of the note to remove")
+    p_remove.set_defaults(func=cmd_remove)
+
+    args = parser.parse_args()
+    args.func(args)
+
+if __name__ == "__main__":
+    main()
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# local data
+.quicknotes/
